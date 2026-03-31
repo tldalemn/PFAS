@@ -437,6 +437,19 @@
     .record-meta { font-family: var(--mono); font-size: 11px; color: #7d8590; display: flex; gap: 12px; flex-wrap: wrap; }
     .record-status { padding: 0 16px; text-align: center; }
 
+    .btn-delete {
+      margin-top: 6px;
+      background: none;
+      border: none;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #555d66;
+      cursor: pointer;
+      padding: 2px 0;
+      transition: color 0.15s;
+    }
+    .btn-delete:hover { color: var(--red-light); }
+
     .empty-state {
       text-align: center;
       padding: 48px;
@@ -1088,7 +1101,7 @@ function renderRecords() {
       ? `<span class="pfas-badge" style="font-size:10px;white-space:nowrap;color:#ff9944;border-color:#ff994444;background:#ff994418">⚠ Probable</span>`
       : `<span class="pfas-badge ${pfasBadgeClass(r.pfas_status)}" style="font-size:10px;white-space:nowrap">${pfasLabel(r.pfas_status)}</span>`;
     return `
-      <div class="record-row ${recRowClass(r.pfas_status)}">
+      <div class="record-row ${recRowClass(r.pfas_status)}" id="record-${r.id}">
         ${thumb}
         <div class="record-info">
           <div class="record-name">${esc(r.product_name)}</div>
@@ -1098,6 +1111,7 @@ function renderRecords() {
             <span>${esc(r.savedAt)}</span>
             ${sdsLink}
           </div>
+          <button class="btn-delete" onclick="deleteRecord(${r.id})" title="Delete record">🗑 Delete</button>
         </div>
         <div class="record-status">
           ${statusBadge}
@@ -1106,6 +1120,35 @@ function renderRecords() {
         </div>
       </div>`;
   }).join('') + '</div>';
+}
+
+// ─── Delete Record ────────────────────────────────────────────────────────────
+async function deleteRecord(id) {
+  if (!confirm('Delete this record? This cannot be undone.')) return;
+  records = records.filter(r => r.id !== id);
+
+  // Remove from IndexedDB
+  try {
+    if (db) {
+      const tx = db.transaction('records', 'readwrite');
+      tx.objectStore('records').delete(id);
+    } else {
+      localStorage.setItem('pfas_records', JSON.stringify(records));
+    }
+  } catch(err) {
+    console.warn('deleteRecord failed:', err);
+  }
+
+  // Animate row out then re-render
+  const row = document.getElementById(`record-${id}`);
+  if (row) {
+    row.style.transition = 'opacity 0.2s, transform 0.2s';
+    row.style.opacity = '0';
+    row.style.transform = 'translateX(20px)';
+    setTimeout(() => renderRecords(), 220);
+  } else {
+    renderRecords();
+  }
 }
 
 // ─── Export ───────────────────────────────────────────────────────────────────
