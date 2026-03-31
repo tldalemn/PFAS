@@ -285,6 +285,29 @@
     }
     .sds-link:hover { background: rgba(43,93,148,0.25); }
 
+    .sds-search-btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .sds-search-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: rgba(34,78,90,0.2);
+      border: 1px solid rgba(34,78,90,0.4);
+      color: #7ecad4;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-decoration: none;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .sds-search-btn:hover { background: rgba(34,78,90,0.35); border-color: rgba(34,78,90,0.6); }
+
     .save-btn-row {
       padding: 16px 20px;
       border-top: 1px solid var(--border);
@@ -533,7 +556,12 @@ The user will provide an image of a product from a Household Hazardous Waste (HH
 
 Your task:
 1. IDENTIFY the product (brand name, product name, manufacturer, type/category)
-2. SEARCH for its SDS — provide the most likely SDS URL from the manufacturer's website or a trusted SDS database (e.g., msds.com, chemicalsafety.com, ehs.ucsb.edu, manufacturer site). If you cannot find a specific URL, say so clearly.
+2. FIND the SDS URL — this is critical. You MUST provide a specific, working URL. Try these sources in order:
+   a. Manufacturer's own website (e.g. wd40.com/sds, rustoleum.com/sds, 3m.com/sds)
+   b. ChemSafetyPro: https://chemsafetypro.com/Topics/CRA/search.html?q=[product+name]
+   c. MSDS.com: https://www.msds.com/search?query=[product+name]
+   d. Chemtrec: https://www.chemtrec.com/sds-search
+   Always construct and return the most specific URL you can. If you cannot find a direct SDS PDF, return a search page URL with the product name and manufacturer pre-filled. Never return null.
 3. ANALYZE for PFAS — based on your knowledge of this product's formulation and/or its SDS, determine if it likely contains PFAS compounds. PFAS include: PTFE (Teflon), PFOA, PFOS, PFAS, fluoropolymers, fluorosurfactants, fluorotelomers (e.g. 6:2 FT), perfluoroalkyl, polyfluoroalkyl, fluorinated ethylene propylene (FEP), perfluorooctanoic acid, and related compounds.
 4. LIST any specific PFAS chemicals identified or likely present.
 5. Give a RECOMMENDATION on whether this product should be placed in the free product room.
@@ -546,8 +574,8 @@ Respond in this exact JSON format (no markdown, no preamble):
   "pfas_status": "DETECTED" | "NOT_DETECTED" | "UNKNOWN",
   "pfas_chemicals": ["list of specific PFAS chemicals found or suspected, empty array if none"],
   "confidence": "HIGH" | "MEDIUM" | "LOW",
-  "sds_url": "URL or null",
-  "sds_note": "Brief note on SDS availability",
+  "sds_url": "Most specific URL you can provide — never null, use a search URL if needed",
+  "sds_note": "Brief note: is this a direct SDS link or a search link?",
   "pfas_analysis": "2-3 sentence explanation of your PFAS determination",
   "recommendation": "ACCEPT" | "REJECT" | "REVIEW",
   "recommendation_note": "Brief reason for your recommendation"
@@ -756,9 +784,20 @@ function renderResult(r) {
   `;
 
   const chemTags = (r.pfas_chemicals || []).map(c => `<span class="chem-tag">${esc(c)}</span>`).join('');
+
+  // Build SDS section — AI link (if any) + always show fallback search buttons
+  const q = encodeURIComponent((r.product_name || '') + ' ' + (r.manufacturer || ''));
+  const searchBtns = `
+    <div class="sds-search-btns">
+      <a href="https://chemsafetypro.com/Topics/CRA/search.html?q=${q}" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 ChemSafetyPro</a>
+      <a href="https://www.msds.com/search?query=${q}" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 MSDS.com</a>
+      <a href="https://www.chemtrec.com/sds-search" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 Chemtrec</a>
+      <a href="https://www.google.com/search?q=${q}+SDS+safety+data+sheet+filetype:pdf" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 Google SDS</a>
+    </div>`;
+
   const sdsSection = r.sds_url
-    ? `<a href="${esc(r.sds_url)}" target="_blank" rel="noopener noreferrer" class="sds-link">📄 ${esc(r.sds_url)}</a>`
-    : `<span style="font-family:var(--mono);font-size:12px;color:#7d8590">No SDS URL available — manual search recommended</span>`;
+    ? `<a href="${esc(r.sds_url)}" target="_blank" rel="noopener noreferrer" class="sds-link">📄 ${esc(r.sds_url)}</a>${searchBtns}`
+    : `<span style="font-family:var(--mono);font-size:12px;color:#7d8590">No direct SDS found — search manually:</span>${searchBtns}`;
 
   document.getElementById('resultBody').innerHTML = `
     <div class="result-section">
