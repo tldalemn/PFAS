@@ -257,6 +257,67 @@
     }
     .result-section p { font-size: 14px; line-height: 1.6; color: #c9d1d9; }
 
+    /* Risk Score */
+    .risk-score-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .risk-bar-track {
+      flex: 1;
+      height: 8px;
+      background: #21262d;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .risk-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+    .risk-score-num {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 500;
+      min-width: 36px;
+      text-align: right;
+      line-height: 1;
+    }
+    .risk-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .risk-reasoning {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #7d8590;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+    .probable-pfas-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      background: rgba(218,54,51,0.1);
+      color: #ff9944;
+      border: 1px solid rgba(218,100,51,0.35);
+      margin-top: 8px;
+      flex-shrink: 0;
+    }
+
     .chemicals-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
     .chem-tag {
       padding: 3px 10px;
@@ -556,15 +617,17 @@ The user will provide an image of a product from a Household Hazardous Waste (HH
 
 Your task:
 1. IDENTIFY the product (brand name, product name, manufacturer, type/category)
-2. FIND the SDS URL — this is critical. You MUST provide a specific, working URL. Try these sources in order:
-   a. Manufacturer's own website (e.g. wd40.com/sds, rustoleum.com/sds, 3m.com/sds)
-   b. ChemSafetyPro: https://chemsafetypro.com/Topics/CRA/search.html?q=[product+name]
-   c. MSDS.com: https://www.msds.com/search?query=[product+name]
-   d. Chemtrec: https://www.chemtrec.com/sds-search
-   Always construct and return the most specific URL you can. If you cannot find a direct SDS PDF, return a search page URL with the product name and manufacturer pre-filled. Never return null.
-3. ANALYZE for PFAS — based on your knowledge of this product's formulation and/or its SDS, determine if it likely contains PFAS compounds. PFAS include: PTFE (Teflon), PFOA, PFOS, PFAS, fluoropolymers, fluorosurfactants, fluorotelomers (e.g. 6:2 FT), perfluoroalkyl, polyfluoroalkyl, fluorinated ethylene propylene (FEP), perfluorooctanoic acid, and related compounds.
+2. FIND the SDS — search the manufacturer's website first (e.g. wd40.com/sds, rustoleum.com/sds). If you cannot find a direct link, return null for sds_url.
+3. ANALYZE for PFAS — based on your knowledge of this product's formulation, determine if it likely contains PFAS compounds. PFAS include: PTFE (Teflon), PFOA, PFOS, fluoropolymers, fluorosurfactants, fluorotelomers (e.g. 6:2 FT), perfluoroalkyl, polyfluoroalkyl, FEP, perfluorooctanoic acid, and related compounds.
 4. LIST any specific PFAS chemicals identified or likely present.
-5. Give a RECOMMENDATION on whether this product should be placed in the free product room.
+5. Assign a PFAS RISK SCORE from 1–10 for every product regardless of pfas_status:
+   - 1-2: Extremely unlikely to contain PFAS (e.g. plain soap, vinegar)
+   - 3-4: Low risk, product type rarely involves PFAS
+   - 5-6: Moderate risk, some products of this type contain PFAS
+   - 7-8: High risk, product type commonly contains PFAS or formulation indicators present
+   - 9-10: Very high risk, known PFAS-containing product or confirmed detection
+   If pfas_status is DETECTED, score must be 7 or higher. If NOT_DETECTED with high confidence, score should be 1-3.
+6. Give a RECOMMENDATION on whether this product should be placed in the free product room.
 
 Respond in this exact JSON format (no markdown, no preamble):
 {
@@ -574,8 +637,10 @@ Respond in this exact JSON format (no markdown, no preamble):
   "pfas_status": "DETECTED" | "NOT_DETECTED" | "UNKNOWN",
   "pfas_chemicals": ["list of specific PFAS chemicals found or suspected, empty array if none"],
   "confidence": "HIGH" | "MEDIUM" | "LOW",
-  "sds_url": "Most specific URL you can provide — never null, use a search URL if needed",
-  "sds_note": "Brief note: is this a direct SDS link or a search link?",
+  "risk_score": 1-10 integer,
+  "risk_reasoning": "One sentence explaining the score",
+  "sds_url": "Direct SDS URL if known, otherwise null",
+  "sds_note": "Brief note on SDS availability",
   "pfas_analysis": "2-3 sentence explanation of your PFAS determination",
   "recommendation": "ACCEPT" | "REJECT" | "REVIEW",
   "recommendation_note": "Brief reason for your recommendation"
@@ -785,19 +850,40 @@ function renderResult(r) {
 
   const chemTags = (r.pfas_chemicals || []).map(c => `<span class="chem-tag">${esc(c)}</span>`).join('');
 
-  // Build SDS section — AI link (if any) + always show fallback search buttons
-  const q = encodeURIComponent((r.product_name || '') + ' ' + (r.manufacturer || ''));
-  const searchBtns = `
-    <div class="sds-search-btns">
-      <a href="https://chemsafetypro.com/Topics/CRA/search.html?q=${q}" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 ChemSafetyPro</a>
-      <a href="https://www.msds.com/search?query=${q}" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 MSDS.com</a>
-      <a href="https://www.chemtrec.com/sds-search" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 Chemtrec</a>
-      <a href="https://www.google.com/search?q=${q}+SDS+safety+data+sheet+filetype:pdf" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 Google SDS</a>
-    </div>`;
+  // Google SDS search only
+  const q = encodeURIComponent((r.product_name || '') + ' ' + (r.manufacturer || '') + ' SDS safety data sheet');
+  const googleBtn = `<a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 Search Google for SDS</a>`;
+  const searchBtns = `<div class="sds-search-btns">${googleBtn}</div>`;
 
   const sdsSection = r.sds_url
     ? `<a href="${esc(r.sds_url)}" target="_blank" rel="noopener noreferrer" class="sds-link">📄 ${esc(r.sds_url)}</a>${searchBtns}`
     : `<span style="font-family:var(--mono);font-size:12px;color:#7d8590">No direct SDS found — search manually:</span>${searchBtns}`;
+
+  // Risk score display
+  const score = r.risk_score || 0;
+  const scoreColor = score >= 8 ? '#ff4444' : score >= 6 ? '#ff9944' : score >= 4 ? '#f0c040' : '#3fb950';
+  const scorePct = (score / 10) * 100;
+  const riskLabelText = score >= 8 ? 'High Risk' : score >= 6 ? 'Elevated Risk' : score >= 4 ? 'Moderate Risk' : 'Low Risk';
+
+  // Auto-upgrade UNKNOWN status if score > 5
+  const effectiveStatus = (r.pfas_status === 'UNKNOWN' && score > 5) ? 'PROBABLE' : r.pfas_status;
+  const probableTag = effectiveStatus === 'PROBABLE'
+    ? `<div><span class="probable-pfas-tag">⚠ Probable PFAS — Risk Score ${score}/10</span></div>`
+    : '';
+
+  const riskSection = `
+    <div class="result-section">
+      <label>PFAS Risk Score</label>
+      <div class="risk-score-row">
+        <span class="risk-score-num" style="color:${scoreColor}">${score}</span>
+        <div class="risk-bar-track">
+          <div class="risk-bar-fill" style="width:${scorePct}%;background:${scoreColor}"></div>
+        </div>
+        <span class="risk-label" style="color:${scoreColor};background:${scoreColor}18;border:1px solid ${scoreColor}44">${riskLabelText}</span>
+      </div>
+      ${r.risk_reasoning ? `<div class="risk-reasoning">${esc(r.risk_reasoning)}</div>` : ''}
+      ${probableTag}
+    </div>`;
 
   document.getElementById('resultBody').innerHTML = `
     <div class="result-section">
@@ -810,6 +896,7 @@ function renderResult(r) {
       <label>PFAS Analysis</label>
       <p>${esc(r.pfas_analysis)}</p>
     </div>
+    ${riskSection}
     ${chemTags ? `<div class="result-section"><label>PFAS Chemicals Identified</label><div class="chemicals-list">${chemTags}</div></div>` : ''}
     <div class="result-section">
       <label>Safety Data Sheet</label>
@@ -909,12 +996,18 @@ function renderRecords() {
 
   container.innerHTML = '<div class="records-list">' + records.map(r => {
     const rb = recBadge(r.recommendation);
+    const score = r.risk_score || null;
+    const scoreColor = score >= 8 ? '#ff4444' : score >= 6 ? '#ff9944' : score >= 4 ? '#f0c040' : '#3fb950';
+    const effectiveStatus = (r.pfas_status === 'UNKNOWN' && score > 5) ? 'PROBABLE' : r.pfas_status;
     const thumb = r.imageDataUrl
       ? `<img class="record-thumb" src="${r.imageDataUrl}" alt="${esc(r.product_name)}" />`
       : `<div class="record-thumb-placeholder">📦</div>`;
     const sdsLink = r.sds_url
       ? `<a href="${esc(r.sds_url)}" target="_blank" rel="noopener noreferrer" style="color:var(--blue-light);text-decoration:none" onclick="event.stopPropagation()">📄 SDS</a>`
       : '';
+    const statusBadge = effectiveStatus === 'PROBABLE'
+      ? `<span class="pfas-badge" style="font-size:10px;white-space:nowrap;color:#ff9944;border-color:#ff994444;background:#ff994418">⚠ Probable</span>`
+      : `<span class="pfas-badge ${pfasBadgeClass(r.pfas_status)}" style="font-size:10px;white-space:nowrap">${pfasLabel(r.pfas_status)}</span>`;
     return `
       <div class="record-row ${recRowClass(r.pfas_status)}">
         ${thumb}
@@ -928,8 +1021,9 @@ function renderRecords() {
           </div>
         </div>
         <div class="record-status">
-          <span class="pfas-badge ${pfasBadgeClass(r.pfas_status)}" style="font-size:10px;white-space:nowrap">${pfasLabel(r.pfas_status)}</span>
-          ${r.recommendation ? `<div style="margin-top:6px"><span class="pfas-badge" style="color:${rb.color};border-color:${rb.color}44;background:${rb.color}18;font-size:10px">${rb.label}</span></div>` : ''}
+          ${statusBadge}
+          ${score ? `<div style="margin-top:5px;font-family:var(--mono);font-size:11px;color:${scoreColor};text-align:center">${score}/10</div>` : ''}
+          ${r.recommendation ? `<div style="margin-top:4px"><span class="pfas-badge" style="color:${rb.color};border-color:${rb.color}44;background:${rb.color}18;font-size:10px">${rb.label}</span></div>` : ''}
         </div>
       </div>`;
   }).join('') + '</div>';
@@ -954,7 +1048,7 @@ async function exportNewRecords() {
     const zip = new JSZip();
 
     // CSV
-    const headers = ['ID','Product Name','Manufacturer','Product Type','PFAS Status','PFAS Chemicals','Confidence','Recommendation','Recommendation Note','PFAS Analysis','SDS URL','SDS Note','Saved At','Photo Filename'];
+    const headers = ['ID','Product Name','Manufacturer','Product Type','PFAS Status','Risk Score','Risk Reasoning','PFAS Chemicals','Confidence','Recommendation','Recommendation Note','PFAS Analysis','SDS URL','SDS Note','Saved At','Photo Filename'];
     const csvEsc = v => {
       if (v == null) return '';
       const s = String(v).replace(/"/g, '""');
@@ -962,7 +1056,8 @@ async function exportNewRecords() {
     };
     const rows = newRecs.map(r => [
       r.id, r.product_name, r.manufacturer, r.product_type,
-      r.pfas_status, (r.pfas_chemicals||[]).join('; '),
+      r.pfas_status, r.risk_score, r.risk_reasoning,
+      (r.pfas_chemicals||[]).join('; '),
       r.confidence, r.recommendation, r.recommendation_note,
       r.pfas_analysis, r.sds_url, r.sds_note, r.savedAt,
       r.imageDataUrl ? `photo_${r.id}.jpg` : ''
