@@ -646,9 +646,67 @@ Respond in this exact JSON format (no markdown, no preamble):
   "recommendation_note": "Brief reason for your recommendation"
 }`;
 
+// ─── IndexedDB ────────────────────────────────────────────────────────────────
+const DB_NAME = 'pfas_screener';
+const DB_VERSION = 1;
+let db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('records')) {
+        d.createObjectStore('records', { keyPath: 'id' });
+      }
+      if (!d.objectStoreNames.contains('meta')) {
+        d.createObjectStore('meta');
+      }
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+
+function dbGetAll() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('records', 'readonly');
+    const req = tx.objectStore('records').getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbPutRecord(record) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('records', 'readwrite');
+    const req = tx.objectStore('records').put(record);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbGetMeta(key) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('meta', 'readonly');
+    const req = tx.objectStore('meta').get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+
+function dbSetMeta(key, value) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('meta', 'readwrite');
+    const req = tx.objectStore('meta').put(value, key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
-  // Load API key
+window.addEventListener('DOMContentLoaded', async () => {
+  // API key stays in localStorage (small, no images)
   const savedKey = localStorage.getItem('pfas_api_key');
   if (savedKey) {
     document.getElementById('apiKeyInput').value = savedKey;
@@ -656,15 +714,23 @@ window.addEventListener('DOMContentLoaded', () => {
       '<span class="api-key-saved">✓ Key loaded from local storage</span>';
   }
 
-  // Load records
+  // Open IndexedDB and load records + last export time
   try {
-    const r = localStorage.getItem('pfas_records');
-    if (r) records = JSON.parse(r);
-  } catch(_) {}
-
-  // Load last export time
-  const t = localStorage.getItem('pfas_last_export');
-  if (t) lastExportTime = parseInt(t, 10);
+    db = await openDB();
+    const stored = await dbGetAll();
+    // Sort newest first
+    records = stored.sort((a, b) => (b.savedTimestamp || b.id) - (a.savedTimestamp || a.id));
+    const t = await dbGetMeta('last_export');
+    if (t) lastExportTime = t;
+  } catch(err) {
+    console.warn('IndexedDB load failed, falling back to localStorage', err);
+    try {
+      const r = localStorage.getItem('pfas_records');
+      if (r) records = JSON.parse(r);
+      const t = localStorage.getItem('pfas_last_export');
+      if (t) lastExportTime = parseInt(t, 10);
+    } catch(_) {}
+  }
 
   renderRecords();
 });
@@ -924,7 +990,7 @@ function discardResult() {
 }
 
 // ─── Save Record ──────────────────────────────────────────────────────────────
-function saveRecord() {
+async function saveRecord() {
   if (!currentResult) return;
   const record = {
     id: Date.now(),
@@ -934,7 +1000,7 @@ function saveRecord() {
     savedTimestamp: Date.now()
   };
   records.unshift(record);
-  persistRecords();
+  await persistRecords(record);
   currentResult = null;
   currentImage = null;
   hideResult();
@@ -944,8 +1010,21 @@ function saveRecord() {
   renderRecords();
 }
 
-function persistRecords() {
-  try { localStorage.setItem('pfas_records', JSON.stringify(records)); } catch(_) {}
+async function persistRecords(record) {
+  // record = single new record to add; if null, re-save all (fallback)
+  try {
+    if (db) {
+      if (record) {
+        await dbPutRecord(record);
+      } else {
+        for (const r of records) await dbPutRecord(r);
+      }
+    } else {
+      localStorage.setItem('pfas_records', JSON.stringify(records));
+    }
+  } catch(err) {
+    console.warn('persistRecords failed:', err);
+  }
 }
 
 // ─── Render Records ───────────────────────────────────────────────────────────
@@ -1083,7 +1162,11 @@ async function exportNewRecords() {
     URL.revokeObjectURL(url);
 
     lastExportTime = Date.now();
-    localStorage.setItem('pfas_last_export', String(lastExportTime));
+    if (db) {
+      await dbSetMeta('last_export', lastExportTime);
+    } else {
+      localStorage.setItem('pfas_last_export', String(lastExportTime));
+    }
     renderRecords();
 
   } catch(err) {
