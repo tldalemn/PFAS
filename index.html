@@ -1,0 +1,1968 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="PFAS Screener" />
+  <title>PFAS Product Screener — Washington County HHW</title>
+
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+  <!-- JSZip -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0d1117;
+      --surface: #161b22;
+      --border: #30363d;
+      --pine: #0B6339;
+      --pine-light: #1a8a52;
+      --blue: #2B5D94;
+      --blue-light: #4080c0;
+      --peacock: #224E5A;
+      --red: #da3633;
+      --red-light: #ff4444;
+      --yellow: #d29922;
+      --yellow-light: #f0c040;
+      --green: #3fb950;
+      --mono: 'DM Mono', monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: #e6edf3;
+      font-family: 'Syne', sans-serif;
+      min-height: 100vh;
+    }
+
+    .app { min-height: 100vh; background: var(--bg); padding: 0 0 80px; }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, #0B6339 0%, #224E5A 50%, #2B5D94 100%);
+      padding: 28px 32px 24px;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      overflow: hidden;
+    }
+    .header::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(45deg, transparent, transparent 20px, rgba(255,255,255,0.02) 20px, rgba(255,255,255,0.02) 40px);
+    }
+    .header-inner { position: relative; max-width: 900px; margin: 0 auto; }
+    .header-label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 3px;
+      color: rgba(255,255,255,0.5);
+      text-transform: uppercase;
+      margin-bottom: 6px;
+    }
+    .header h1 { font-size: 28px; font-weight: 800; color: #fff; letter-spacing: -0.5px; line-height: 1.1; }
+    .header-sub { font-family: var(--mono); font-size: 12px; color: rgba(255,255,255,0.6); margin-top: 8px; }
+
+    .main { max-width: 900px; margin: 0 auto; padding: 32px 16px; }
+
+    /* API Key */
+    .api-key-section {
+      margin-bottom: 24px;
+      padding: 16px 20px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+    }
+    .api-key-section label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #7d8590;
+      text-transform: uppercase;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .api-key-row { display: flex; gap: 10px; align-items: center; }
+    .api-key-input {
+      flex: 1;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 14px;
+      color: #e6edf3;
+      font-family: var(--mono);
+      font-size: 13px;
+      outline: none;
+    }
+    .api-key-input:focus { border-color: var(--blue-light); }
+    .api-key-hint { font-family: var(--mono); font-size: 11px; color: #555d66; margin-top: 8px; line-height: 1.5; }
+    .api-key-saved { color: var(--green); font-size: 11px; font-family: var(--mono); }
+
+    /* Upload Zone */
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 12px;
+      padding: 48px 32px;
+      text-align: center;
+      background: var(--surface);
+      cursor: pointer;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+    .upload-zone:hover, .upload-zone.drag-over {
+      border-color: var(--pine-light);
+      background: rgba(11,99,57,0.08);
+    }
+    .file-input {
+      position: absolute;
+      width: 1px; height: 1px;
+      opacity: 0;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      clip-path: inset(50%);
+      border: 0; padding: 0; margin: -1px;
+    }
+    .upload-icon {
+      width: 56px; height: 56px;
+      margin: 0 auto 16px;
+      background: linear-gradient(135deg, var(--pine), var(--blue));
+      border-radius: 16px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+    }
+    .upload-zone h3 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+    .upload-zone p { font-family: var(--mono); font-size: 12px; color: #7d8590; }
+
+    /* Preview */
+    .preview-area {
+      margin-top: 20px;
+      border-radius: 12px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      display: none;
+    }
+    .preview-img { width: 100%; max-height: 320px; object-fit: contain; background: #000; display: block; }
+    .preview-controls {
+      padding: 16px;
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      border-top: 1px solid var(--border);
+    }
+
+    /* Buttons */
+    .btn {
+      font-family: 'Syne', sans-serif;
+      font-weight: 700;
+      font-size: 14px;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      letter-spacing: 0.3px;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--pine), var(--pine-light));
+      color: #fff;
+    }
+    .btn-primary:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 4px 16px rgba(11,99,57,0.4); }
+    .btn-ghost {
+      background: transparent;
+      color: #7d8590;
+      border: 1px solid var(--border);
+    }
+    .btn-ghost:hover:not(:disabled) { color: #e6edf3; border-color: #7d8590; }
+    .btn-sm { padding: 7px 14px; font-size: 12px; }
+
+    /* Status */
+    .status-bar {
+      margin-top: 20px;
+      padding: 14px 20px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      font-family: var(--mono);
+      font-size: 12px;
+      display: none;
+      align-items: center;
+      gap: 10px;
+      color: #7d8590;
+    }
+    .status-bar.visible { display: flex; }
+    .status-bar.error { color: #ff6b6b; border-color: rgba(218,54,51,0.3); background: rgba(218,54,51,0.05); }
+
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid var(--border);
+      border-top-color: var(--pine-light);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      flex-shrink: 0;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Result Card */
+    .result-card {
+      margin-top: 24px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      overflow: hidden;
+      background: var(--surface);
+      animation: slideIn 0.3s ease;
+      display: none;
+    }
+    .result-card.visible { display: block; }
+    @keyframes slideIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+
+    .result-header {
+      padding: 16px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      border-bottom: 1px solid var(--border);
+      flex-wrap: wrap;
+    }
+    .pfas-badge {
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      flex-shrink: 0;
+    }
+    .pfas-detected { background: rgba(218,54,51,0.15); color: var(--red-light); border: 1px solid rgba(218,54,51,0.3); }
+    .pfas-clear { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+    .pfas-unknown { background: rgba(210,153,34,0.15); color: var(--yellow-light); border: 1px solid rgba(210,153,34,0.3); }
+
+    .result-product { font-size: 18px; font-weight: 700; flex: 1; min-width: 150px; }
+    .result-body { padding: 20px; display: grid; gap: 16px; }
+
+    .result-section label {
+      font-family: var(--mono);
+      font-size: 10px;
+      letter-spacing: 2px;
+      color: #7d8590;
+      text-transform: uppercase;
+      display: block;
+      margin-bottom: 6px;
+    }
+    .result-section p { font-size: 14px; line-height: 1.6; color: #c9d1d9; }
+
+    /* Risk Score */
+    .risk-score-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 4px;
+    }
+    .risk-bar-track {
+      flex: 1;
+      height: 8px;
+      background: #21262d;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    .risk-bar-fill {
+      height: 100%;
+      border-radius: 4px;
+      transition: width 0.4s ease;
+    }
+    .risk-score-num {
+      font-family: var(--mono);
+      font-size: 20px;
+      font-weight: 500;
+      min-width: 36px;
+      text-align: right;
+      line-height: 1;
+    }
+    .risk-label {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding: 3px 10px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .risk-reasoning {
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #7d8590;
+      margin-top: 6px;
+      line-height: 1.5;
+    }
+    .probable-pfas-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 14px;
+      border-radius: 20px;
+      font-family: var(--mono);
+      font-size: 11px;
+      font-weight: 500;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      background: rgba(218,54,51,0.1);
+      color: #ff9944;
+      border: 1px solid rgba(218,100,51,0.35);
+      margin-top: 8px;
+      flex-shrink: 0;
+    }
+
+    .chemicals-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+    .chem-tag {
+      padding: 3px 10px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 11px;
+      background: rgba(218,54,51,0.1);
+      color: var(--red-light);
+      border: 1px solid rgba(218,54,51,0.2);
+    }
+
+    .sds-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      border-radius: 6px;
+      background: rgba(43,93,148,0.15);
+      border: 1px solid rgba(43,93,148,0.3);
+      color: var(--blue-light);
+      font-family: var(--mono);
+      font-size: 12px;
+      text-decoration: none;
+      transition: all 0.15s;
+      word-break: break-all;
+    }
+    .sds-link:hover { background: rgba(43,93,148,0.25); }
+
+    .sds-search-btns {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .sds-search-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 6px 12px;
+      border-radius: 6px;
+      background: rgba(34,78,90,0.2);
+      border: 1px solid rgba(34,78,90,0.4);
+      color: #7ecad4;
+      font-family: var(--mono);
+      font-size: 11px;
+      text-decoration: none;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .sds-search-btn:hover { background: rgba(34,78,90,0.35); border-color: rgba(34,78,90,0.6); }
+
+    .save-btn-row {
+      padding: 16px 20px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    /* Records */
+    .records-section { margin-top: 48px; }
+    .section-title {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: #7d8590;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .section-title::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+    .badge-count {
+      background: var(--pine);
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-family: var(--mono);
+    }
+    .badge-new {
+      background: var(--blue);
+      color: #fff;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-family: var(--mono);
+    }
+
+    .records-list { display: grid; gap: 12px; }
+    .record-row {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 80px 1fr auto;
+      align-items: center;
+      transition: border-color 0.15s;
+    }
+    .record-row:hover { border-color: #444c56; }
+    .record-row.pfas-yes { border-left: 3px solid var(--red-light); }
+    .record-row.pfas-no { border-left: 3px solid var(--green); }
+    .record-row.pfas-unk { border-left: 3px solid var(--yellow-light); }
+
+    .record-thumb { width: 80px; height: 72px; object-fit: cover; display: block; }
+    .record-thumb-placeholder {
+      width: 80px; height: 72px;
+      background: #21262d;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px; color: #444;
+    }
+
+    .record-info { padding: 12px 16px; }
+    .record-name { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+    .record-meta { font-family: var(--mono); font-size: 11px; color: #7d8590; display: flex; gap: 12px; flex-wrap: wrap; }
+    .record-status { padding: 0 16px; text-align: center; }
+
+    .btn-delete {
+      margin-top: 6px;
+      background: none;
+      border: none;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: #555d66;
+      cursor: pointer;
+      padding: 2px 0;
+      transition: color 0.15s;
+    }
+    .btn-delete:hover { color: var(--red-light); }
+
+    .empty-state {
+      text-align: center;
+      padding: 48px;
+      color: #444c56;
+      font-family: var(--mono);
+      font-size: 13px;
+      border: 1px dashed var(--border);
+      border-radius: 10px;
+    }
+
+    /* Export Panel */
+    .export-panel {
+      margin-bottom: 20px;
+      padding: 20px;
+      border-radius: 10px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      display: none;
+    }
+    .export-panel.visible { display: block; }
+    .export-panel-title {
+      font-family: var(--mono);
+      font-size: 11px;
+      letter-spacing: 2px;
+      color: #7d8590;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .export-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .btn-export-zip {
+      background: linear-gradient(135deg, rgba(43,93,148,0.25), rgba(34,78,90,0.25));
+      border: 1px solid rgba(43,93,148,0.5);
+      color: var(--blue-light);
+      font-size: 13px;
+      padding: 10px 22px;
+    }
+    .btn-export-zip:hover:not(:disabled) {
+      background: linear-gradient(135deg, rgba(43,93,148,0.4), rgba(34,78,90,0.4));
+      transform: translateY(-1px);
+      box-shadow: 0 4px 16px rgba(43,93,148,0.3);
+    }
+    .export-last { margin-top: 10px; font-family: var(--mono); font-size: 11px; color: #444c56; line-height: 1.5; }
+    .export-hint { margin-top: 10px; font-family: var(--mono); font-size: 11px; color: #555d66; line-height: 1.5; }
+
+    /* Disclaimer */
+    .disclaimer {
+      margin-top: 32px;
+      padding: 16px 20px;
+      border-radius: 8px;
+      background: rgba(210,153,34,0.08);
+      border: 1px solid rgba(210,153,34,0.2);
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--yellow-light);
+      line-height: 1.6;
+    }
+    .disclaimer strong { display: block; margin-bottom: 4px; font-size: 12px; }
+
+    /* Settings panel */
+    .settings-toggle {
+      display: flex; align-items: center; justify-content: space-between;
+      cursor: pointer; user-select: none;
+    }
+    .settings-toggle span.caret { font-family: var(--mono); font-size: 12px; color: #7d8590; }
+    .settings-body { display: none; margin-top: 16px; }
+    .settings-body.open { display: block; }
+    .field { margin-bottom: 14px; }
+    .field label {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+      color: #7d8590; text-transform: uppercase; display: block; margin-bottom: 6px;
+    }
+    .field-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .input {
+      flex: 1; min-width: 180px;
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 10px 14px; color: #e6edf3; font-family: var(--mono); font-size: 13px; outline: none;
+    }
+    .input:focus { border-color: var(--blue-light); }
+    select.input { appearance: none; cursor: pointer; }
+    .hint { font-family: var(--mono); font-size: 11px; color: #555d66; margin-top: 6px; line-height: 1.5; }
+    .ok { color: var(--green); }
+    .warn { color: var(--yellow-light); }
+    .bad { color: #ff6b6b; }
+    .switch-row {
+      display: flex; align-items: center; gap: 10px;
+      font-family: var(--mono); font-size: 12px; color: #c9d1d9; margin-bottom: 10px;
+    }
+    .switch-row input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--pine-light); cursor: pointer; }
+    .divider { height: 1px; background: var(--border); margin: 18px 0; }
+    .subhead {
+      font-family: var(--mono); font-size: 10px; letter-spacing: 2px;
+      color: #7d8590; text-transform: uppercase; margin-bottom: 12px;
+    }
+
+    /* Photo strip */
+    .thumbstrip { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 16px 0; }
+    .photo-chip { position: relative; width: 72px; height: 72px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+    .photo-chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .photo-chip .chip-x {
+      position: absolute; top: 2px; right: 2px; width: 18px; height: 18px;
+      border-radius: 50%; background: rgba(0,0,0,0.7); color: #fff; border: none;
+      font-size: 11px; line-height: 1; cursor: pointer;
+    }
+    .photo-chip .chip-label {
+      position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.65);
+      font-family: var(--mono); font-size: 9px; text-align: center; color: #c9d1d9; padding: 1px 0;
+    }
+    .add-chip {
+      width: 72px; height: 72px; border-radius: 8px; border: 1px dashed var(--border);
+      background: transparent; color: #7d8590; font-size: 20px; cursor: pointer;
+    }
+    .add-chip:hover { border-color: var(--pine-light); color: var(--pine-light); }
+
+    .source-btns { display: flex; gap: 10px; justify-content: center; margin-top: 18px; flex-wrap: wrap; }
+    .source-btns label { cursor: pointer; }
+    .chip-actions { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+    .chip-add {
+      width: 72px; height: 33px; border-radius: 8px; border: 1px dashed var(--border);
+      background: transparent; color: #7d8590; font-family: var(--mono); font-size: 11px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+    }
+    .chip-add:hover { border-color: var(--pine-light); color: var(--pine-light); }
+
+    /* Flags + sources */
+    .flag-tag {
+      display: inline-block; padding: 3px 10px; border-radius: 4px;
+      font-family: var(--mono); font-size: 11px; margin: 0 6px 6px 0;
+      background: rgba(255,153,68,0.1); color: #ff9944; border: 1px solid rgba(255,153,68,0.3);
+    }
+    .source-link {
+      display: block; font-family: var(--mono); font-size: 11px; color: var(--blue-light);
+      text-decoration: none; margin-bottom: 4px; word-break: break-all;
+    }
+    .source-link:hover { text-decoration: underline; }
+
+    /* Override controls */
+    .override-grid { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .override-grid select {
+      background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+      padding: 7px 10px; color: #e6edf3; font-family: var(--mono); font-size: 12px; outline: none;
+    }
+
+    /* Sync */
+    .sync-badge {
+      font-family: var(--mono); font-size: 10px; padding: 2px 8px; border-radius: 10px;
+      white-space: nowrap;
+    }
+    .sync-yes { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
+    .sync-no { background: rgba(210,153,34,0.1); color: var(--yellow-light); border: 1px solid rgba(210,153,34,0.25); }
+    .btn-sync {
+      background: linear-gradient(135deg, rgba(11,99,57,0.3), rgba(34,78,90,0.3));
+      border: 1px solid rgba(26,138,82,0.5); color: #6ee7a0; font-size: 13px; padding: 10px 22px;
+    }
+    .btn-sync:hover:not(:disabled) { background: linear-gradient(135deg, rgba(11,99,57,0.45), rgba(34,78,90,0.45)); transform: translateY(-1px); }
+    .btn-danger-ghost { background: transparent; border: 1px solid rgba(218,54,51,0.35); color: #ff6b6b; }
+
+    /* Mobile tweaks */
+    @media (max-width: 480px) {
+      .header { padding: 20px 16px 18px; }
+      .header h1 { font-size: 22px; }
+      .upload-zone { padding: 36px 20px; }
+      .record-row { grid-template-columns: 64px 1fr auto; }
+      .record-thumb { width: 64px; height: 64px; }
+      .record-thumb-placeholder { width: 64px; height: 64px; }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <!-- Header -->
+  <div class="header">
+    <div class="header-inner">
+      <div class="header-label">Washington County HHW</div>
+      <h1>PFAS Product Screener</h1>
+      <div class="header-sub">Free Product Room · Photo → SDS → PFAS Analysis → Record</div>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- Settings -->
+    <div class="api-key-section">
+      <div class="settings-toggle" onclick="toggleSettings()">
+        <label style="margin:0">Settings · API + Google Sheet</label>
+        <span class="caret" id="settingsCaret">▸ open</span>
+      </div>
+      <div class="settings-body" id="settingsBody">
+
+        <div class="subhead">Anthropic API</div>
+        <div class="field">
+          <label>API Key</label>
+          <div class="field-row">
+            <input type="password" class="input" id="apiKeyInput" placeholder="sk-ant-..." autocomplete="off" />
+            <button class="btn btn-sm btn-ghost" onclick="saveSettings()">Save</button>
+          </div>
+          <div class="hint" id="apiKeyHint">
+            Stored in this browser only. Get a key at <a href="https://console.anthropic.com" target="_blank" style="color:var(--blue-light)">console.anthropic.com</a>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Model</label>
+          <select class="input" id="modelSelect" onchange="saveSettings()">
+            <option value="claude-sonnet-4-6">Sonnet 4.6 — balanced (recommended)</option>
+            <option value="claude-sonnet-5">Sonnet 5 — newer, stronger</option>
+            <option value="claude-opus-5">Opus 5 — most capable, slowest/priciest</option>
+            <option value="claude-haiku-4-5-20251001">Haiku 4.5 — fastest, cheapest</option>
+            <option value="claude-sonnet-4-20250514">Sonnet 4 (legacy)</option>
+          </select>
+          <div class="hint">If a model returns a 404, your key does not have access to it. Fall back to Sonnet 4.6.</div>
+        </div>
+
+        <div class="switch-row">
+          <input type="checkbox" id="webSearchToggle" checked onchange="saveSettings()" />
+          <label for="webSearchToggle" style="margin:0;text-transform:none;letter-spacing:0;font-size:12px;color:#c9d1d9">
+            Let Claude search the web for the real SDS (much better accuracy, adds cost per search)
+          </label>
+        </div>
+        <div class="switch-row">
+          <input type="checkbox" id="thinkingToggle" onchange="saveSettings()" />
+          <label for="thinkingToggle" style="margin:0;text-transform:none;letter-spacing:0;font-size:12px;color:#c9d1d9">
+            Extended thinking (slower, better on ambiguous labels)
+          </label>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="subhead">Google Sheet sync</div>
+        <div class="field">
+          <label>Apps Script Web App URL</label>
+          <input type="text" class="input" id="sheetUrlInput" placeholder="https://script.google.com/macros/s/AKfy.../exec" autocomplete="off" style="width:100%" />
+        </div>
+        <div class="field">
+          <label>Shared Secret</label>
+          <div class="field-row">
+            <input type="password" class="input" id="sheetSecretInput" placeholder="matches SHARED_SECRET in the script" autocomplete="off" />
+            <button class="btn btn-sm btn-ghost" onclick="testSheet()">Test</button>
+          </div>
+          <div class="hint" id="sheetHint">Not configured — records stay on this device until you set this up.</div>
+        </div>
+        <div class="switch-row">
+          <input type="checkbox" id="autoSyncToggle" onchange="saveSettings()" />
+          <label for="autoSyncToggle" style="margin:0;text-transform:none;letter-spacing:0;font-size:12px;color:#c9d1d9">
+            Auto-send each record to the sheet when I save it
+          </label>
+        </div>
+        <div class="switch-row">
+          <input type="checkbox" id="sendPhotosToggle" checked onchange="saveSettings()" />
+          <label for="sendPhotosToggle" style="margin:0;text-transform:none;letter-spacing:0;font-size:12px;color:#c9d1d9">
+            Upload photos to the Drive folder and link them in the sheet
+          </label>
+        </div>
+        <div class="switch-row">
+          <input type="checkbox" id="blindSyncToggle" onchange="saveSettings()" />
+          <label for="blindSyncToggle" style="margin:0;text-transform:none;letter-spacing:0;font-size:12px;color:#c9d1d9">
+            Blind mode — use only if sync fails with a CORS error
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Upload Zone -->
+    <div class="upload-zone" id="uploadZone"
+         ondragover="handleDragOver(event)" ondragleave="handleDragLeave(event)" ondrop="handleDrop(event)">
+      <input type="file" id="fileInput" class="file-input" accept="image/*" multiple onchange="handleFileChange(event)" />
+      <input type="file" id="cameraInput" class="file-input" accept="image/*" capture="environment" onchange="handleFileChange(event)" />
+      <div class="upload-icon">📷</div>
+      <h3 id="uploadTitle">Take or Upload Product Photos</h3>
+      <p id="uploadSubtitle">Front label first · then the back / ingredient panel · up to 4 photos</p>
+      <div class="source-btns">
+        <label class="btn btn-sm btn-primary" for="cameraInput">📷 Take Photo</label>
+        <label class="btn btn-sm btn-ghost" for="fileInput">🖼 Photos &amp; Files</label>
+      </div>
+    </div>
+
+    <!-- Preview -->
+    <div class="preview-area" id="previewArea">
+      <img class="preview-img" id="previewImg" src="" alt="Product" />
+      <div class="thumbstrip" id="thumbStrip"></div>
+      <div class="preview-controls">
+        <button class="btn btn-primary" id="analyzeBtn" onclick="analyze()">🔍 Analyze for PFAS</button>
+        <button class="btn btn-ghost" onclick="clearImage()">Clear</button>
+      </div>
+    </div>
+
+    <!-- Status -->
+    <div class="status-bar" id="statusBar">
+      <div class="spinner"></div>
+      <span id="statusText"></span>
+    </div>
+
+    <!-- Error -->
+    <div class="status-bar error" id="errorBar">
+      <span id="errorText"></span>
+    </div>
+
+    <!-- Result Card -->
+    <div class="result-card" id="resultCard">
+      <div class="result-header" id="resultHeader"></div>
+      <div class="result-body" id="resultBody"></div>
+      <div class="save-btn-row">
+        <button class="btn btn-ghost" onclick="discardResult()">Discard</button>
+        <button class="btn btn-primary" onclick="saveRecord()">💾 Save Record</button>
+      </div>
+    </div>
+
+    <!-- Disclaimer -->
+    <div class="disclaimer">
+      <strong>⚠ Important Disclaimer</strong>
+      This tool uses AI to assist with PFAS screening. Results are not a substitute for a full SDS review or professional chemical analysis. Always verify the SDS manually before making final acceptance decisions. AI-identified SDS links should be confirmed before use.
+    </div>
+
+    <!-- Records -->
+    <div class="records-section">
+      <div class="section-title">
+        Product Records
+        <span class="badge-count" id="recordCount">0</span>
+        <span class="badge-new" id="newBadge" style="display:none"></span>
+      </div>
+
+      <!-- Export Panel -->
+      <div class="export-panel" id="exportPanel">
+        <div class="export-panel-title">Export</div>
+        <div class="export-row">
+          <button class="btn btn-sync" id="syncBtn" onclick="syncUnsynced()">☁ Send to Google Sheet</button>
+          <button class="btn btn-export-zip" id="exportBtn" onclick="exportNewRecords()">📦 Export New Records (.zip)</button>
+          <button class="btn btn-ghost btn-sm" onclick="downloadCsvOnly()">⬇ CSV only</button>
+        </div>
+        <div class="export-last" id="syncStatus"></div>
+        <div class="export-last" id="exportLast">No export yet — all records will be included in first export.</div>
+        <div class="export-hint">Sheet sync appends one row per record and links the photo from Drive · ZIP export stays available as a backup</div>
+      </div>
+
+      <div id="recordsContainer">
+        <div class="empty-state">No records yet — analyze and save a product to begin</div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── State ───────────────────────────────────────────────────────────────────
+let currentImages = [];    // [{ dataUrl, fileName, type }]
+let currentResult = null;  // parsed + post-processed result
+let records = [];
+let lastExportTime = null;
+let isAnalyzing = false;
+let isExporting = false;
+let isSyncing = false;
+
+const MAX_PHOTOS = 4;
+const MAX_DIM = 1400;      // px — downscale before sending to the API
+const JPEG_QUALITY = 0.82;
+
+const settings = {
+  apiKey: '',
+  model: 'claude-sonnet-4-6',
+  webSearch: true,
+  thinking: false,
+  sheetUrl: '',
+  sheetSecret: '',
+  autoSync: false,
+  sendPhotos: true,
+  blindSync: false,
+  site: '',
+  initials: ''
+};
+
+// ─── PFAS lexicon (deterministic backstop) ───────────────────────────────────
+// Strong terms = PFAS by definition or near enough for HHW screening purposes.
+const STRONG_TERMS = [
+  [/polytetrafluoroethylene|\bPTFE\b/i, 'PTFE'],
+  [/\bteflon\b/i, 'Teflon (PTFE)'],
+  [/perfluoro[a-z]*/i, 'perfluoro- compound'],
+  [/polyfluoro[a-z]*/i, 'polyfluoro- compound'],
+  [/fluorotelomer|telomer alcohol|\b\d:\d\s?FT[SOA]?\b/i, 'fluorotelomer'],
+  [/fluorosurfactant|fluoro-?surfactant/i, 'fluorosurfactant'],
+  [/fluoropolymer/i, 'fluoropolymer'],
+  [/fluoroalkyl|fluoroalkane|fluoroalkene/i, 'fluoroalkyl substance'],
+  [/\bPFOA\b|\bPFOS\b|\bPFBS\b|\bPFBA\b|\bPFHxA\b|\bPFHxS\b|\bPFNA\b|\bPFDA\b|\bPFHpA\b/i, 'named PFAS analyte'],
+  [/\bFEP\b|\bETFE\b|\bPVDF\b|\bPCTFE\b|\bPFPE\b/i, 'fluoropolymer resin'],
+  [/\bGenX\b|\bHFPO[- ]?DA\b/i, 'GenX / HFPO-DA'],
+  [/scotchgard|zonyl|capstone|nafion|krytox|fomblin|dyneon|forafac/i, 'PFAS trade name'],
+  [/fluoroethylene|fluoropropylene|fluorinated ethylene/i, 'fluorinated monomer'],
+  [/fluorinated (?:surfactant|polymer|acrylate|urethane|resin)/i, 'fluorinated polymer/surfactant']
+];
+
+// Weak terms = worth flagging, not conclusive. Refrigerants and dyes excluded below.
+const WEAK_TERMS = [
+  [/fluorocarbon/i, 'fluorocarbon (verify — may be a refrigerant)'],
+  [/fluorinated/i, 'generic "fluorinated" claim'],
+  [/\bDWR\b|durable water repellent/i, 'DWR treatment'],
+  [/stain[- ]?(?:repellent|resistant|guard)/i, 'stain repellency claim'],
+  [/water[- ]?(?:repellent|proofing) (?:spray|treatment)/i, 'water repellency treatment'],
+  [/non[- ]?stick|nonstick/i, 'non-stick claim'],
+  [/oil[- ]?(?:repellent|resistant) coating/i, 'oil repellency claim']
+];
+
+const FALSE_POSITIVES = /chlorofluorocarbon|hydrofluorocarbon|hydrochlorofluorocarbon|\bCFC-|\bHFC-|\bHCFC-|\bR-?134a\b|\bR-?22\b|sulfur hexafluoride|sodium fluoride|stannous fluoride|calcium fluoride|hydrofluoric acid|fluorescent/i;
+
+// Category priors — floor the risk score by product type.
+const CATEGORY_PRIORS = [
+  [/ski wax|snowboard wax|glide wax/i, 9, 'Ski/glide waxes are a top-tier PFAS source'],
+  [/fabric protect|stain repel|scotchgard|upholstery protect|carpet protect/i, 9, 'Fabric/stain protectants are a top-tier PFAS source'],
+  [/waterproofing spray|water repellent spray|leather protect|shoe protect/i, 8, 'Water-repellent sprays commonly use side-chain fluoropolymers'],
+  [/fire ?fighting foam|\bAFFF\b|class b foam|fire extinguisher/i, 9, 'Class B firefighting foams are a legacy PFAS source'],
+  [/non[- ]?stick|cookware|pan spray|griddle/i, 8, 'Non-stick coatings are typically PTFE'],
+  [/dry (?:film )?lubricant|ptfe lubricant|chain lube|penetrating (?:oil|lubricant)|silicone spray/i, 6, 'Aerosol lubricants frequently contain PTFE or fluorinated additives'],
+  [/floor (?:finish|wax|polish|sealer)|acrylic floor/i, 6, 'Floor finishes have historically used fluorosurfactants'],
+  [/car wax|paint sealant|ceramic coat|rain repellent|windshield treatment/i, 6, 'Auto appearance products often use fluoropolymer chemistry'],
+  [/paint|stain|varnish|polyurethane|primer|coating/i, 5, 'Coatings may use fluorosurfactants as leveling agents'],
+  [/caulk|sealant\b|silicone sealant/i, 4, 'Some sealants contain fluorinated additives'],
+  [/wood glue|pva glue|white glue|carpenter.s glue|school glue/i, 2, 'Water-based PVA adhesives have no functional use for PFAS'],
+  [/adhesive|glue|epoxy|cement\b/i, 3, 'Adhesives occasionally use fluorinated surfactants'],
+  [/pesticide|herbicide|insecticide|fungicide/i, 5, 'Some formulations use fluorinated actives or fluorinated container treatment'],
+  [/mascara|foundation|cosmetic|sunscreen|shave|lotion/i, 5, 'Long-wear cosmetics may contain PTFE or perfluoro ingredients'],
+  [/degreaser|cleaner|detergent|soap|solvent/i, 3, 'Most cleaners do not contain PFAS'],
+  [/antifreeze|motor oil|brake fluid|transmission fluid/i, 3, 'Automotive fluids rarely contain PFAS'],
+  [/vinegar|baking soda|fertilizer|salt/i, 1, 'Simple chemistry, PFAS very unlikely']
+];
+
+// ─── Prompt ──────────────────────────────────────────────────────────────────
+const PFAS_PROMPT = `You are a hazardous materials chemist supporting a county Household Hazardous Waste (HHW) facility. Staff photograph consumer products before deciding whether to put them in the facility's free product room. Your job is to screen those products for PFAS (per- and polyfluoroalkyl substances).
+
+You will receive one or more photos of the same product. Usually photo 1 is the front label and later photos are the back label, ingredient panel, or lot/UPC code.
+
+WORK IN THIS ORDER:
+
+1. READ THE LABEL. Transcribe every legible word from the photos into "label_text" — brand, product name, manufacturer, claims, warnings, ingredient list, net contents, UPC, EPA registration number, lot codes. Do not paraphrase and do not skip small print. If text is cut off or blurry, transcribe what you can and note the gap. This transcription is used by a downstream keyword scan, so accuracy matters more than tidiness.
+
+2. IDENTIFY the product: brand, exact product name, manufacturer, and category.
+
+3. FIND THE SDS. If you have web search available, use it. Search the manufacturer's own site first (for example "site:wd40.com SDS WD-40 Specialist"), then aggregators. Open or read enough of the SDS to check Section 3 (composition) and Section 9. Only return an "sds_url" that you actually saw in a search result. Never construct or guess a URL. If you did not verify it, return null and say so in "sds_note".
+
+4. DECIDE. PFAS include PTFE/Teflon, PFOA, PFOS, PFBS, PFHxS, GenX/HFPO-DA, fluoropolymers, fluorosurfactants, fluorotelomers (6:2 FTOH etc.), perfluoroalkyl and polyfluoroalkyl substances, FEP, PFA, ETFE, PVDF, PFPE. Simple fluoride salts (sodium fluoride), refrigerants (CFC/HCFC/HFC), and fluorescent dyes are NOT PFAS.
+
+CRITICAL CALIBRATION RULE: US consumer labeling does not require PFAS disclosure, and SDS Section 3 only lists hazardous ingredients above a threshold. A clean label is NOT evidence of a PFAS-free product. Use "NOT_DETECTED" only when the product is simple, well-characterized chemistry where PFAS would have no function (vinegar, plain soap, motor oil, fertilizer), or when the manufacturer explicitly states the product is PFAS-free. Otherwise use "UNKNOWN" and let the risk score carry the signal. It is far better to return UNKNOWN with an honest risk score than a false "clear".
+
+5. SCORE 1-10, always, regardless of status:
+   1-2 PFAS would serve no function in this chemistry
+   3-4 Low risk, this category rarely involves PFAS
+   5-6 Moderate, some products in this category contain PFAS
+   7-8 High, category commonly contains PFAS or the formulation suggests it
+   9-10 Known or confirmed PFAS-containing product
+   DETECTED requires 7 or higher. NOT_DETECTED should be 1-3.
+
+6. RECOMMEND for the free product room: ACCEPT, REJECT, or REVIEW.
+
+Respond with ONLY a JSON object. No markdown fences, no preamble, no text after it.
+{
+  "product_name": "Full product name as printed",
+  "manufacturer": "Manufacturer name",
+  "product_type": "Category, e.g. aerosol lubricant, fabric protectant, latex paint",
+  "label_text": "Verbatim transcription of all legible label text",
+  "ingredients_listed": ["each ingredient exactly as printed, empty array if none shown"],
+  "pfas_status": "DETECTED" | "NOT_DETECTED" | "UNKNOWN",
+  "pfas_chemicals": ["specific PFAS found or suspected, empty array if none"],
+  "evidence_basis": "LABEL" | "SDS" | "MANUFACTURER_STATEMENT" | "CATEGORY_PRIOR" | "NONE",
+  "confidence": "HIGH" | "MEDIUM" | "LOW",
+  "risk_score": 1-10 integer,
+  "risk_reasoning": "One sentence explaining the score",
+  "sds_url": "Verified SDS URL you actually saw, otherwise null",
+  "sds_note": "What you found or why you could not find it",
+  "sds_section3_summary": "What Section 3 lists, or null if you did not read it",
+  "pfas_analysis": "2-4 sentences explaining the determination and what it rests on",
+  "data_gaps": "What you could not determine and what staff should check, or null",
+  "handling_note": "Disposal or handling note if PFAS is likely, otherwise null",
+  "recommendation": "ACCEPT" | "REJECT" | "REVIEW",
+  "recommendation_note": "Brief reason"
+}`;
+
+// ─── IndexedDB ────────────────────────────────────────────────────────────────
+const DB_NAME = 'pfas_screener';
+const DB_VERSION = 1;
+let db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains('records')) d.createObjectStore('records', { keyPath: 'id' });
+      if (!d.objectStoreNames.contains('meta')) d.createObjectStore('meta');
+    };
+    req.onsuccess = (e) => resolve(e.target.result);
+    req.onerror = (e) => reject(e.target.error);
+  });
+}
+function dbGetAll() {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('records', 'readonly');
+    const req = tx.objectStore('records').getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
+function dbPutRecord(record) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('records', 'readwrite');
+    const req = tx.objectStore('records').put(record);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+function dbGetMeta(key) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('meta', 'readonly');
+    const req = tx.objectStore('meta').get(key);
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
+function dbSetMeta(key, value) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('meta', 'readwrite');
+    const req = tx.objectStore('meta').put(value, key);
+    req.onsuccess = () => resolve();
+    req.onerror = () => reject(req.error);
+  });
+}
+
+// ─── Settings ─────────────────────────────────────────────────────────────────
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem('pfas_settings');
+    if (raw) Object.assign(settings, JSON.parse(raw));
+  } catch (_) {}
+  // migrate from the older single-key storage
+  const legacy = localStorage.getItem('pfas_api_key');
+  if (legacy && !settings.apiKey) settings.apiKey = legacy;
+
+  document.getElementById('apiKeyInput').value = settings.apiKey || '';
+  document.getElementById('modelSelect').value = settings.model || 'claude-sonnet-4-6';
+  document.getElementById('webSearchToggle').checked = !!settings.webSearch;
+  document.getElementById('thinkingToggle').checked = !!settings.thinking;
+  document.getElementById('sheetUrlInput').value = settings.sheetUrl || '';
+  document.getElementById('sheetSecretInput').value = settings.sheetSecret || '';
+  document.getElementById('autoSyncToggle').checked = !!settings.autoSync;
+  document.getElementById('sendPhotosToggle').checked = !!settings.sendPhotos;
+  document.getElementById('blindSyncToggle').checked = !!settings.blindSync;
+
+  if (settings.apiKey) {
+    document.getElementById('apiKeyHint').innerHTML = '<span class="ok">✓ Key loaded from this browser</span>';
+  }
+  updateSheetHint();
+}
+
+function saveSettings() {
+  settings.apiKey = document.getElementById('apiKeyInput').value.trim();
+  settings.model = document.getElementById('modelSelect').value;
+  settings.webSearch = document.getElementById('webSearchToggle').checked;
+  settings.thinking = document.getElementById('thinkingToggle').checked;
+  settings.sheetUrl = document.getElementById('sheetUrlInput').value.trim();
+  settings.sheetSecret = document.getElementById('sheetSecretInput').value.trim();
+  settings.autoSync = document.getElementById('autoSyncToggle').checked;
+  settings.sendPhotos = document.getElementById('sendPhotosToggle').checked;
+  settings.blindSync = document.getElementById('blindSyncToggle').checked;
+  localStorage.setItem('pfas_settings', JSON.stringify(settings));
+  if (settings.apiKey) {
+    document.getElementById('apiKeyHint').innerHTML = '<span class="ok">✓ Saved to this browser</span>';
+  }
+  updateSheetHint();
+  renderRecords();
+}
+
+function updateSheetHint() {
+  const el = document.getElementById('sheetHint');
+  if (settings.sheetUrl) {
+    el.innerHTML = '<span class="ok">✓ Endpoint set</span> — press Test to confirm it answers.';
+  } else {
+    el.textContent = 'Not configured — records stay on this device until you set this up.';
+  }
+}
+
+function toggleSettings() {
+  const body = document.getElementById('settingsBody');
+  const caret = document.getElementById('settingsCaret');
+  body.classList.toggle('open');
+  caret.textContent = body.classList.contains('open') ? '▾ close' : '▸ open';
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  loadSettings();
+  ['sheetUrlInput', 'sheetSecretInput', 'apiKeyInput'].forEach(id => {
+    document.getElementById(id).addEventListener('blur', saveSettings);
+  });
+
+  try {
+    db = await openDB();
+    const stored = await dbGetAll();
+    records = stored.sort((a, b) => (b.savedTimestamp || b.id) - (a.savedTimestamp || a.id));
+    const t = await dbGetMeta('last_export');
+    if (t) lastExportTime = t;
+  } catch (err) {
+    console.warn('IndexedDB load failed, falling back to localStorage', err);
+    try {
+      const r = localStorage.getItem('pfas_records');
+      if (r) records = JSON.parse(r);
+      const t = localStorage.getItem('pfas_last_export');
+      if (t) lastExportTime = parseInt(t, 10);
+    } catch (_) {}
+  }
+  if (!settings.apiKey) toggleSettings();
+  renderRecords();
+});
+
+// ─── File handling ────────────────────────────────────────────────────────────
+function handleFileChange(e) {
+  const files = Array.from(e.target.files || []);
+  const input = e.target;
+  files.forEach(f => { if (f.type.startsWith('image/')) loadFile(f); });
+  setTimeout(() => { input.value = ''; }, 0);
+}
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.add('drag-over');
+}
+function handleDragLeave() {
+  document.getElementById('uploadZone').classList.remove('drag-over');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('uploadZone').classList.remove('drag-over');
+  Array.from(e.dataTransfer.files || []).forEach(f => { if (f.type.startsWith('image/')) loadFile(f); });
+}
+
+// Downscale in a canvas — smaller payloads, faster calls, less storage.
+function downscale(dataUrl) {
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      let { width, height } = img;
+      const scale = Math.min(1, MAX_DIM / Math.max(width, height));
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', JPEG_QUALITY));
+    };
+    img.onerror = () => resolve(dataUrl);
+    img.src = dataUrl;
+  });
+}
+
+async function loadFile(file) {
+  if (currentImages.length >= MAX_PHOTOS) {
+    showError(`Maximum ${MAX_PHOTOS} photos per product.`);
+    return;
+  }
+  const raw = await new Promise(res => {
+    const reader = new FileReader();
+    reader.onload = e => res(e.target.result);
+    reader.readAsDataURL(file);
+  });
+  const dataUrl = await downscale(raw);
+  currentImages.push({ dataUrl, fileName: file.name, type: 'image/jpeg' });
+  renderPhotos();
+  hideResult(); hideStatus(); hideError();
+}
+
+function renderPhotos() {
+  const area = document.getElementById('previewArea');
+  const strip = document.getElementById('thumbStrip');
+  if (currentImages.length === 0) {
+    area.style.display = 'none';
+    strip.innerHTML = '';
+    document.getElementById('uploadTitle').textContent = 'Take or Upload Product Photos';
+    document.getElementById('uploadSubtitle').textContent = 'Front label first · then the back / ingredient panel · up to 4 photos';
+    return;
+  }
+  area.style.display = 'block';
+  document.getElementById('previewImg').src = currentImages[0].dataUrl;
+  document.getElementById('uploadTitle').textContent = 'Add another photo';
+  document.getElementById('uploadSubtitle').textContent =
+    `${currentImages.length} of ${MAX_PHOTOS} · back label and ingredient panel improve accuracy the most`;
+
+  const labels = ['Front', 'Back', 'Extra', 'Extra'];
+  strip.innerHTML = currentImages.map((img, i) => `
+    <div class="photo-chip">
+      <img src="${img.dataUrl}" alt="Photo ${i + 1}" />
+      <button class="chip-x" onclick="removePhoto(${i})" title="Remove">×</button>
+      <div class="chip-label">${labels[i] || 'Extra'}</div>
+    </div>`).join('') +
+    (currentImages.length < MAX_PHOTOS
+      ? `<div class="chip-actions">
+           <label class="chip-add" for="cameraInput">📷 shoot</label>
+           <label class="chip-add" for="fileInput">🖼 pick</label>
+         </div>`
+      : '');
+}
+
+function removePhoto(i) {
+  currentImages.splice(i, 1);
+  renderPhotos();
+}
+
+function clearImage() {
+  currentImages = [];
+  currentResult = null;
+  document.getElementById('previewImg').src = '';
+  renderPhotos();
+  hideResult(); hideStatus(); hideError();
+}
+
+// ─── UI helpers ───────────────────────────────────────────────────────────────
+function showStatus(msg) {
+  document.getElementById('statusText').textContent = msg;
+  document.getElementById('statusBar').classList.add('visible');
+}
+function hideStatus() { document.getElementById('statusBar').classList.remove('visible'); }
+function showError(msg) {
+  document.getElementById('errorText').textContent = '⚠ ' + msg;
+  document.getElementById('errorBar').classList.add('visible');
+}
+function hideError() { document.getElementById('errorBar').classList.remove('visible'); }
+function hideResult() { document.getElementById('resultCard').classList.remove('visible'); }
+
+function esc(str) {
+  if (str == null) return '';
+  return String(str)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// ─── Response parsing ─────────────────────────────────────────────────────────
+function extractJson(text) {
+  const trimmed = text.replace(/```json/gi, '').replace(/```/g, '').trim();
+  try { return JSON.parse(trimmed); } catch (_) {}
+  // Walk the string and take the last balanced {...} block.
+  const candidates = [];
+  let depth = 0, start = -1, inStr = false, escNext = false;
+  for (let i = 0; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (escNext) { escNext = false; continue; }
+    if (ch === '\\') { escNext = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '{') { if (depth === 0) start = i; depth++; }
+    else if (ch === '}') { depth--; if (depth === 0 && start >= 0) candidates.push(trimmed.slice(start, i + 1)); }
+  }
+  for (const c of candidates.sort((a, b) => b.length - a.length)) {
+    try { return JSON.parse(c); } catch (_) {}
+  }
+  return null;
+}
+
+function collectSources(content) {
+  const urls = [];
+  for (const block of content) {
+    if (block.type === 'web_search_tool_result' && Array.isArray(block.content)) {
+      block.content.forEach(item => {
+        if (item.url && !urls.some(u => u.url === item.url)) {
+          urls.push({ url: item.url, title: item.title || item.url });
+        }
+      });
+    }
+  }
+  return urls;
+}
+
+// ─── Post-processing: lexicon scan + category prior ───────────────────────────
+// Words that flip a term match into a denial. Without this the scanner reads
+// "contains no fluoropolymers" as a fluoropolymer hit.
+const NEGATION = /\b(no|not|none|non|never|free|without|absent|excluded|zero|lacks?|lacking|devoid|neither|nor)\b/i;
+
+function splitClauses(text) {
+  return String(text).split(/[.;:\n•|]+/);
+}
+
+// Scan one string. Returns confirmed hits and separately the terms that appeared
+// inside a negative statement, which are useful evidence in their own right.
+function matchTerms(text, terms) {
+  const hits = [], negated = [];
+  if (!text) return { hits, negated };
+  splitClauses(text).forEach(clause => {
+    if (/\b(pfas|fluorine|fluorinated)[- ]free\b/i.test(clause)) {
+      terms.forEach(([re, label]) => { if (re.test(clause)) negated.push(label); });
+      return;
+    }
+    terms.forEach(([re, label]) => {
+      const m = clause.match(re);
+      if (!m || FALSE_POSITIVES.test(m[0])) return;
+      const before = clause.slice(0, m.index);
+      if (NEGATION.test(before)) negated.push(label);
+      else hits.push(label);
+    });
+  });
+  return { hits: [...new Set(hits)], negated: [...new Set(negated)] };
+}
+
+function scanForPfas(result) {
+  // Only source text gets scanned for strong terms: the transcribed label, the
+  // ingredient list, the model's explicit chemical list, and the SDS Section 3
+  // summary. Free-prose fields are excluded, they are argument, not evidence.
+  const sourceText = [
+    result.label_text,
+    (result.ingredients_listed || []).join('. '),
+    (result.pfas_chemicals || []).join('. '),
+    result.sds_section3_summary
+  ].filter(Boolean).join('\n');
+
+  const nameText = [result.product_name, result.product_type].filter(Boolean).join('. ');
+
+  const strongScan = matchTerms(sourceText, STRONG_TERMS);
+  const weakScan = matchTerms(sourceText + '\n' + nameText, WEAK_TERMS);
+
+  return {
+    strong: strongScan.hits,
+    weak: weakScan.hits,
+    negated: [...new Set(strongScan.negated.concat(weakScan.negated))]
+  };
+}
+
+function categoryPrior(result) {
+  const text = [result.product_type, result.product_name, result.label_text].filter(Boolean).join(' ');
+  for (const [re, floor, note] of CATEGORY_PRIORS) {
+    if (re.test(text)) return { floor, note };
+  }
+  return null;
+}
+
+function postProcess(raw) {
+  const r = Object.assign({}, raw);
+
+  // Normalize enums and score
+  const validStatus = ['DETECTED', 'NOT_DETECTED', 'UNKNOWN'];
+  if (!validStatus.includes(r.pfas_status)) r.pfas_status = 'UNKNOWN';
+  if (!['ACCEPT', 'REJECT', 'REVIEW'].includes(r.recommendation)) r.recommendation = 'REVIEW';
+  if (!['HIGH', 'MEDIUM', 'LOW'].includes(r.confidence)) r.confidence = 'LOW';
+  let score = parseInt(r.risk_score, 10);
+  if (!Number.isFinite(score)) score = 5;
+  score = Math.min(10, Math.max(1, score));
+
+  const scan = scanForPfas(r);
+  const prior = categoryPrior(r);
+  const adjustments = [];
+
+  // A documented clear finding: the model checked a real SDS or a manufacturer
+  // statement, and the terms it found were all inside denials.
+  const documentedClear = r.pfas_status === 'NOT_DETECTED'
+    && ['SDS', 'MANUFACTURER_STATEMENT'].indexOf(r.evidence_basis) !== -1
+    && scan.strong.length === 0;
+
+  // Strong evidence in the label, ingredient list or SDS Section 3 overrides a soft call.
+  if (scan.strong.length) {
+    if (r.pfas_status !== 'DETECTED') {
+      adjustments.push(`Keyword scan found ${scan.strong.join(', ')} in the label or SDS text — status raised to DETECTED`);
+      r.pfas_status = 'DETECTED';
+      r.evidence_basis = r.evidence_basis === 'SDS' ? 'SDS' : 'LABEL';
+    }
+    if (score < 8) { adjustments.push('Score floored at 8 by keyword evidence'); score = 8; }
+  } else if (scan.weak.length && r.pfas_status === 'NOT_DETECTED' && !documentedClear) {
+    adjustments.push(`Flagged terms present (${scan.weak.join(', ')}) — status softened to UNKNOWN`);
+    r.pfas_status = 'UNKNOWN';
+  }
+
+  if (documentedClear && scan.negated.length) {
+    adjustments.push(`PFAS explicitly ruled out in the source document (${scan.negated.join(', ')})`);
+  }
+
+  // Category prior floors the score, but a documented clear finding beats a prior.
+  if (prior && r.pfas_status !== 'DETECTED' && !documentedClear) {
+    if (score < prior.floor && r.evidence_basis !== 'MANUFACTURER_STATEMENT') {
+      adjustments.push(`Category prior raised score to ${prior.floor}: ${prior.note}`);
+      score = prior.floor;
+    }
+  }
+
+  // Internal consistency
+  if (r.pfas_status === 'DETECTED' && score < 7) score = 7;
+  if (r.pfas_status === 'NOT_DETECTED' && score > 3 && !documentedClear) {
+    adjustments.push('Score above 3 with a NOT_DETECTED call — treating as UNKNOWN');
+    r.pfas_status = 'UNKNOWN';
+  }
+  if (documentedClear && score > 3) {
+    adjustments.push('Documented SDS clear — score lowered to match the evidence');
+    score = Math.min(score, 3);
+  }
+  if (r.pfas_status === 'DETECTED' && r.recommendation === 'ACCEPT') {
+    adjustments.push('PFAS detected — recommendation changed to REVIEW');
+    r.recommendation = 'REVIEW';
+  }
+  if (score >= 8 && r.recommendation === 'ACCEPT') {
+    adjustments.push('High risk score — recommendation changed to REVIEW');
+    r.recommendation = 'REVIEW';
+  }
+
+  r.risk_score = score;
+  r.flags_strong = scan.strong;
+  r.flags_weak = scan.weak;
+  r.flags_negated = scan.negated;
+  r.category_prior = prior ? prior.note : null;
+  r.adjustments = adjustments;
+  r.effective_status = (r.pfas_status === 'UNKNOWN' && score > 5) ? 'PROBABLE' : r.pfas_status;
+  return r;
+}
+
+// ─── Analyze ──────────────────────────────────────────────────────────────────
+async function analyze() {
+  if (currentImages.length === 0 || isAnalyzing) return;
+  saveSettings();
+  if (!settings.apiKey) {
+    showError('Enter your Anthropic API key in Settings first.');
+    document.getElementById('settingsBody').classList.add('open');
+    return;
+  }
+
+  isAnalyzing = true;
+  hideError(); hideResult();
+  const btn = document.getElementById('analyzeBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Analyzing...';
+
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 180000);
+
+  try {
+    showStatus(settings.webSearch
+      ? 'Reading label, then searching for the SDS...'
+      : 'Reading label and assessing formulation...');
+
+    const content = currentImages.map((img, i) => ([
+      { type: 'text', text: `Photo ${i + 1}${i === 0 ? ' (front label)' : ''}:` },
+      { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: img.dataUrl.split(',')[1] } }
+    ])).flat();
+    content.push({
+      type: 'text',
+      text: 'Screen this product for PFAS. Transcribe the label text verbatim, verify the SDS if you can, and return only the JSON object.'
+    });
+
+    const body = {
+      model: settings.model,
+      max_tokens: settings.thinking ? 6000 : 3000,
+      system: PFAS_PROMPT,
+      messages: [{ role: 'user', content }]
+    };
+    if (settings.webSearch) {
+      body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 6 }];
+    }
+    if (settings.thinking) {
+      body.thinking = { type: 'enabled', budget_tokens: 3000 };
+    }
+
+    const response = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': settings.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify(body)
+    });
+
+    showStatus('Processing analysis...');
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+    if (!Array.isArray(data.content)) throw new Error('Unexpected API response shape.');
+
+    const text = data.content.filter(c => c.type === 'text').map(c => c.text || '').join('\n');
+    const parsed = extractJson(text);
+    if (!parsed) throw new Error('Could not parse the model response as JSON. Try again, or switch models.');
+
+    parsed.sources = collectSources(data.content);
+    parsed.model_used = settings.model;
+    parsed.web_search_used = !!settings.webSearch;
+    parsed.searches_run = data.usage && data.usage.server_tool_use
+      ? (data.usage.server_tool_use.web_search_requests || 0) : 0;
+
+    currentResult = postProcess(parsed);
+    renderResult(currentResult);
+    hideStatus();
+
+  } catch (err) {
+    showError(err.name === 'AbortError'
+      ? 'Analysis timed out after 3 minutes. Try again with web search off.'
+      : (err.message || 'Analysis failed.'));
+    hideStatus();
+  } finally {
+    clearTimeout(timeout);
+    isAnalyzing = false;
+    btn.disabled = false;
+    btn.innerHTML = '🔍 Analyze for PFAS';
+  }
+}
+
+// ─── Render result ────────────────────────────────────────────────────────────
+function pfasBadgeClass(status) {
+  if (status === 'DETECTED') return 'pfas-detected';
+  if (status === 'NOT_DETECTED') return 'pfas-clear';
+  return 'pfas-unknown';
+}
+function pfasLabel(status) {
+  if (status === 'DETECTED') return '⚠ PFAS Detected';
+  if (status === 'NOT_DETECTED') return '✓ PFAS Clear';
+  if (status === 'PROBABLE') return '⚠ Probable PFAS';
+  return '? Unknown';
+}
+function recBadge(rec) {
+  if (rec === 'ACCEPT') return { label: 'Accept', color: '#3fb950' };
+  if (rec === 'REJECT') return { label: 'Reject', color: '#da3633' };
+  return { label: 'Review', color: '#d29922' };
+}
+function scoreColorFor(score) {
+  return score >= 8 ? '#ff4444' : score >= 6 ? '#ff9944' : score >= 4 ? '#f0c040' : '#3fb950';
+}
+
+function renderResult(r) {
+  const rb = recBadge(r.recommendation);
+  document.getElementById('resultHeader').innerHTML = `
+    <span class="pfas-badge ${pfasBadgeClass(r.effective_status)}">${pfasLabel(r.effective_status)}</span>
+    <span class="result-product">${esc(r.product_name || 'Unknown Product')}</span>
+    <span class="pfas-badge" style="color:${rb.color};border-color:${rb.color}44;background:${rb.color}18">${rb.label}</span>
+  `;
+
+  const score = r.risk_score || 0;
+  const sc = scoreColorFor(score);
+  const riskLabelText = score >= 8 ? 'High Risk' : score >= 6 ? 'Elevated Risk' : score >= 4 ? 'Moderate Risk' : 'Low Risk';
+
+  const chemTags = (r.pfas_chemicals || []).map(c => `<span class="chem-tag">${esc(c)}</span>`).join('');
+  const flagTags = [...(r.flags_strong || []).map(f => `<span class="chem-tag">🔬 ${esc(f)}</span>`),
+                    ...(r.flags_weak || []).map(f => `<span class="flag-tag">⚑ ${esc(f)}</span>`),
+                    ...(r.flags_negated || []).map(f => `<span class="flag-tag" style="background:rgba(63,185,80,0.08);color:var(--green);border-color:rgba(63,185,80,0.3)">✓ ${esc(f)} ruled out</span>`)].join('');
+
+  const q = encodeURIComponent((r.product_name || '') + ' ' + (r.manufacturer || '') + ' SDS safety data sheet');
+  const searchBtns = `<div class="sds-search-btns">
+    <a href="https://www.google.com/search?q=${q}" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🔍 Google SDS</a>
+    <a href="https://chemicalsafety.com/sds-search/?searchterm=${encodeURIComponent(r.product_name || '')}" target="_blank" rel="noopener noreferrer" class="sds-search-btn">🗄 SDS database</a>
+  </div>`;
+
+  const sdsSection = r.sds_url
+    ? `<a href="${esc(r.sds_url)}" target="_blank" rel="noopener noreferrer" class="sds-link">📄 ${esc(r.sds_url)}</a>${searchBtns}`
+    : `<span style="font-family:var(--mono);font-size:12px;color:#7d8590">No verified SDS link — search manually:</span>${searchBtns}`;
+
+  const sourcesHtml = (r.sources || []).length
+    ? `<div class="result-section"><label>Sources Claude Checked (${r.sources.length})</label>
+        ${r.sources.slice(0, 8).map(s => `<a class="source-link" href="${esc(s.url)}" target="_blank" rel="noopener noreferrer">↗ ${esc(s.title)}</a>`).join('')}
+       </div>`
+    : (r.web_search_used
+        ? `<div class="result-section"><label>Sources</label><p style="font-family:var(--mono);font-size:11px;color:#7d8590">No web sources were used — this call rests on the label and model knowledge.</p></div>`
+        : '');
+
+  const adjHtml = (r.adjustments || []).length
+    ? `<div class="result-section"><label>Screening Adjustments Applied</label>
+        <p style="font-family:var(--mono);font-size:11px;color:#7d8590;line-height:1.7">
+          ${r.adjustments.map(a => '· ' + esc(a)).join('<br />')}
+        </p></div>`
+    : '';
+
+  document.getElementById('resultBody').innerHTML = `
+    <div class="result-section">
+      <label>Product Details</label>
+      <p><strong>${esc(r.manufacturer)}</strong> · ${esc(r.product_type)}
+        <span style="font-family:var(--mono);font-size:11px;color:#7d8590;margin-left:10px">
+          Confidence: ${esc(r.confidence)} · Basis: ${esc(r.evidence_basis || 'NONE')}
+        </span>
+      </p>
+    </div>
+    <div class="result-section">
+      <label>PFAS Analysis</label>
+      <p>${esc(r.pfas_analysis)}</p>
+    </div>
+    <div class="result-section">
+      <label>PFAS Risk Score</label>
+      <div class="risk-score-row">
+        <span class="risk-score-num" style="color:${sc}">${score}</span>
+        <div class="risk-bar-track"><div class="risk-bar-fill" style="width:${score * 10}%;background:${sc}"></div></div>
+        <span class="risk-label" style="color:${sc};background:${sc}18;border:1px solid ${sc}44">${riskLabelText}</span>
+      </div>
+      ${r.risk_reasoning ? `<div class="risk-reasoning">${esc(r.risk_reasoning)}</div>` : ''}
+      ${r.category_prior ? `<div class="risk-reasoning">Category note: ${esc(r.category_prior)}</div>` : ''}
+    </div>
+    ${chemTags || flagTags ? `<div class="result-section"><label>Chemicals &amp; Flagged Terms</label><div class="chemicals-list">${chemTags}${flagTags}</div></div>` : ''}
+    <div class="result-section">
+      <label>Safety Data Sheet</label>
+      <p style="margin-bottom:8px">${esc(r.sds_note)}</p>
+      ${r.sds_section3_summary ? `<p style="margin-bottom:8px;font-size:13px;color:#8b949e">Section 3: ${esc(r.sds_section3_summary)}</p>` : ''}
+      ${sdsSection}
+    </div>
+    ${sourcesHtml}
+    ${r.data_gaps ? `<div class="result-section"><label>What To Verify</label><p>${esc(r.data_gaps)}</p></div>` : ''}
+    ${r.handling_note ? `<div class="result-section"><label>Handling</label><p>${esc(r.handling_note)}</p></div>` : ''}
+    <div class="result-section">
+      <label>Recommendation</label>
+      <p>${esc(r.recommendation_note)}</p>
+    </div>
+    ${adjHtml}
+    <div class="result-section">
+      <label>Staff Override Before Saving</label>
+      <div class="override-grid">
+        <select id="ovStatus">
+          <option value="">Status: keep AI call</option>
+          <option value="DETECTED">Status: PFAS detected</option>
+          <option value="UNKNOWN">Status: unknown</option>
+          <option value="NOT_DETECTED">Status: PFAS clear</option>
+        </select>
+        <select id="ovRec">
+          <option value="">Decision: keep AI call</option>
+          <option value="ACCEPT">Decision: accept</option>
+          <option value="REVIEW">Decision: review</option>
+          <option value="REJECT">Decision: reject</option>
+        </select>
+        <input class="input" id="ovNote" placeholder="Staff note (optional)" style="min-width:200px" />
+        <input class="input" id="ovInitials" placeholder="Initials" value="${esc(settings.initials || '')}" style="min-width:90px;max-width:110px" />
+        <select id="ovSite">
+          <option value="">Site…</option>
+          <option value="South Environmental Center" ${settings.site === 'South Environmental Center' ? 'selected' : ''}>South (Woodbury)</option>
+          <option value="North Environmental Center" ${settings.site === 'North Environmental Center' ? 'selected' : ''}>North (Forest Lake)</option>
+          <option value="Other" ${settings.site === 'Other' ? 'selected' : ''}>Other</option>
+        </select>
+      </div>
+      <div class="hint">Your override is what gets recorded. The AI's original call is kept alongside it.</div>
+    </div>
+  `;
+  document.getElementById('resultCard').classList.add('visible');
+}
+
+function discardResult() {
+  currentResult = null;
+  hideResult();
+}
+
+// ─── Save record ──────────────────────────────────────────────────────────────
+async function saveRecord() {
+  if (!currentResult) return;
+  const ovStatus = (document.getElementById('ovStatus') || {}).value || '';
+  const ovRec = (document.getElementById('ovRec') || {}).value || '';
+  const ovNote = ((document.getElementById('ovNote') || {}).value || '').trim();
+  const initials = ((document.getElementById('ovInitials') || {}).value || '').trim();
+  const site = (document.getElementById('ovSite') || {}).value || '';
+
+  if (initials !== settings.initials || site !== settings.site) {
+    settings.initials = initials;
+    settings.site = site;
+    localStorage.setItem('pfas_settings', JSON.stringify(settings));
+  }
+
+  const record = {
+    id: Date.now(),
+    ...currentResult,
+    ai_pfas_status: currentResult.pfas_status,
+    ai_recommendation: currentResult.recommendation,
+    pfas_status: ovStatus || currentResult.pfas_status,
+    recommendation: ovRec || currentResult.recommendation,
+    overridden: !!(ovStatus || ovRec),
+    staff_note: ovNote,
+    screener: initials,
+    site: site,
+    photos: currentImages.map(i => i.dataUrl),
+    imageDataUrl: currentImages.length ? currentImages[0].dataUrl : null,
+    savedAt: new Date().toLocaleString(),
+    savedTimestamp: Date.now(),
+    syncedAt: null
+  };
+  if (ovStatus) {
+    record.effective_status = (ovStatus === 'UNKNOWN' && record.risk_score > 5) ? 'PROBABLE' : ovStatus;
+  }
+
+  records.unshift(record);
+  await persistRecords(record);
+  currentResult = null;
+  currentImages = [];
+  hideResult();
+  renderPhotos();
+  renderRecords();
+
+  if (settings.autoSync && settings.sheetUrl) {
+    syncRecords([record], true);
+  }
+}
+
+async function persistRecords(record) {
+  try {
+    if (db) {
+      if (record) await dbPutRecord(record);
+      else for (const r of records) await dbPutRecord(r);
+    } else {
+      localStorage.setItem('pfas_records', JSON.stringify(records));
+    }
+  } catch (err) {
+    console.warn('persistRecords failed:', err);
+  }
+}
+
+// ─── Render records ───────────────────────────────────────────────────────────
+function recRowClass(status) {
+  if (status === 'DETECTED') return 'pfas-yes';
+  if (status === 'NOT_DETECTED') return 'pfas-no';
+  return 'pfas-unk';
+}
+
+function renderRecords() {
+  const newRecs = getNewRecords();
+  const unsynced = records.filter(r => !r.syncedAt);
+  document.getElementById('recordCount').textContent = records.length;
+
+  const newBadge = document.getElementById('newBadge');
+  if (newRecs.length > 0) {
+    newBadge.textContent = newRecs.length + ' new';
+    newBadge.style.display = 'inline';
+  } else {
+    newBadge.style.display = 'none';
+  }
+
+  const exportPanel = document.getElementById('exportPanel');
+  const exportBtn = document.getElementById('exportBtn');
+  const syncBtn = document.getElementById('syncBtn');
+
+  if (records.length > 0) {
+    exportPanel.classList.add('visible');
+    exportBtn.disabled = newRecs.length === 0;
+    exportBtn.textContent = newRecs.length
+      ? `📦 Export ${newRecs.length} New Record${newRecs.length !== 1 ? 's' : ''} (.zip)`
+      : '✓ All Records Exported';
+
+    if (!settings.sheetUrl) {
+      syncBtn.disabled = true;
+      syncBtn.textContent = '☁ Sheet Not Configured';
+    } else if (unsynced.length === 0) {
+      syncBtn.disabled = true;
+      syncBtn.textContent = '✓ Sheet Up To Date';
+    } else if (!isSyncing) {
+      syncBtn.disabled = false;
+      syncBtn.textContent = `☁ Send ${unsynced.length} Record${unsynced.length !== 1 ? 's' : ''} to Google Sheet`;
+    }
+
+    document.getElementById('exportLast').innerHTML = lastExportTime
+      ? `Last ZIP export: ${new Date(lastExportTime).toLocaleString()}`
+      : 'No ZIP export yet.';
+  } else {
+    exportPanel.classList.remove('visible');
+  }
+
+  const container = document.getElementById('recordsContainer');
+  if (records.length === 0) {
+    container.innerHTML = '<div class="empty-state">No records yet — analyze and save a product to begin</div>';
+    return;
+  }
+
+  container.innerHTML = '<div class="records-list">' + records.map(r => {
+    const rb = recBadge(r.recommendation);
+    const score = r.risk_score || null;
+    const sc = scoreColorFor(score);
+    const eff = r.effective_status || ((r.pfas_status === 'UNKNOWN' && score > 5) ? 'PROBABLE' : r.pfas_status);
+    const thumb = r.imageDataUrl
+      ? `<img class="record-thumb" src="${r.imageDataUrl}" alt="${esc(r.product_name)}" />`
+      : `<div class="record-thumb-placeholder">📦</div>`;
+    const sdsLink = r.sds_url
+      ? `<a href="${esc(r.sds_url)}" target="_blank" rel="noopener noreferrer" style="color:var(--blue-light);text-decoration:none" onclick="event.stopPropagation()">📄 SDS</a>`
+      : '';
+    const sync = r.syncedAt
+      ? `<span class="sync-badge sync-yes">☁ synced</span>`
+      : `<span class="sync-badge sync-no">local only</span>`;
+    return `
+      <div class="record-row ${recRowClass(r.pfas_status)}" id="record-${r.id}">
+        ${thumb}
+        <div class="record-info">
+          <div class="record-name">${esc(r.product_name)}${r.overridden ? ' <span style="font-family:var(--mono);font-size:10px;color:#7d8590">(staff override)</span>' : ''}</div>
+          <div class="record-meta">
+            <span>${esc(r.manufacturer)}</span>
+            <span>${esc(r.product_type)}</span>
+            <span>${esc(r.savedAt)}</span>
+            ${r.screener ? `<span>${esc(r.screener)}</span>` : ''}
+            ${sdsLink}
+          </div>
+          <button class="btn-delete" onclick="deleteRecord(${r.id})" title="Delete record">🗑 Delete</button>
+        </div>
+        <div class="record-status">
+          <span class="pfas-badge ${pfasBadgeClass(eff)}" style="font-size:10px;white-space:nowrap">${pfasLabel(eff)}</span>
+          ${score ? `<div style="margin-top:5px;font-family:var(--mono);font-size:11px;color:${sc};text-align:center">${score}/10</div>` : ''}
+          <div style="margin-top:4px"><span class="pfas-badge" style="color:${rb.color};border-color:${rb.color}44;background:${rb.color}18;font-size:10px">${rb.label}</span></div>
+          <div style="margin-top:6px">${sync}</div>
+        </div>
+      </div>`;
+  }).join('') + '</div>';
+}
+
+async function deleteRecord(id) {
+  if (!confirm('Delete this record? This cannot be undone.')) return;
+  records = records.filter(r => r.id !== id);
+  try {
+    if (db) {
+      const tx = db.transaction('records', 'readwrite');
+      tx.objectStore('records').delete(id);
+    } else {
+      localStorage.setItem('pfas_records', JSON.stringify(records));
+    }
+  } catch (err) { console.warn('deleteRecord failed:', err); }
+  const row = document.getElementById(`record-${id}`);
+  if (row) {
+    row.style.transition = 'opacity 0.2s, transform 0.2s';
+    row.style.opacity = '0';
+    row.style.transform = 'translateX(20px)';
+    setTimeout(() => renderRecords(), 220);
+  } else {
+    renderRecords();
+  }
+}
+
+// ─── Google Sheet sync ────────────────────────────────────────────────────────
+const SHEET_FIELDS = [
+  'id', 'savedAt', 'site', 'screener', 'product_name', 'manufacturer', 'product_type',
+  'pfas_status', 'effective_status', 'risk_score', 'risk_reasoning', 'confidence',
+  'evidence_basis', 'pfas_chemicals', 'flags_strong', 'flags_weak', 'category_prior',
+  'pfas_analysis', 'sds_url', 'sds_note', 'sds_section3_summary', 'data_gaps',
+  'handling_note', 'recommendation', 'recommendation_note', 'ai_pfas_status',
+  'ai_recommendation', 'overridden', 'staff_note', 'ingredients_listed', 'label_text',
+  'flags_negated', 'sources', 'model_used', 'web_search_used'
+];
+
+function recordForSheet(r) {
+  const out = {};
+  SHEET_FIELDS.forEach(f => {
+    let v = r[f];
+    if (Array.isArray(v)) {
+      v = f === 'sources' ? v.map(s => s.url).join(' | ') : v.join('; ');
+    }
+    out[f] = v == null ? '' : v;
+  });
+  if (settings.sendPhotos && r.imageDataUrl) {
+    out.photoBase64 = r.imageDataUrl.split(',')[1];
+    out.photoName = `pfas_${r.id}.jpg`;
+  }
+  return out;
+}
+
+function setSyncStatus(msg, cls) {
+  const el = document.getElementById('syncStatus');
+  el.innerHTML = msg ? `<span class="${cls || ''}">${msg}</span>` : '';
+}
+
+async function postToSheet(payload) {
+  if (settings.blindSync) {
+    await fetch(settings.sheetUrl, {
+      method: 'POST',
+      mode: 'no-cors',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify(payload)
+    });
+    return { ok: true, blind: true };
+  }
+  const res = await fetch(settings.sheetUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // text/plain avoids a CORS preflight
+    body: JSON.stringify(payload),
+    redirect: 'follow'
+  });
+  const text = await res.text();
+  try { return JSON.parse(text); }
+  catch (_) { throw new Error('Endpoint did not return JSON. Check that the Web App is deployed with access set to "Anyone".'); }
+}
+
+async function testSheet() {
+  saveSettings();
+  if (!settings.sheetUrl) { setSyncStatus('Enter the Web App URL first.', 'bad'); return; }
+  document.getElementById('sheetHint').innerHTML = 'Testing...';
+  try {
+    const res = await postToSheet({ action: 'ping', secret: settings.sheetSecret });
+    document.getElementById('sheetHint').innerHTML = res.ok
+      ? `<span class="ok">✓ Connected${res.sheet ? ' to "' + esc(res.sheet) + '"' : ''}</span>`
+      : `<span class="bad">✗ ${esc(res.error || 'Rejected')}</span>`;
+  } catch (err) {
+    document.getElementById('sheetHint').innerHTML = `<span class="bad">✗ ${esc(err.message)}</span>`;
+  }
+}
+
+function chunkRecords(list) {
+  const chunks = [];
+  let batch = [], size = 0;
+  for (const r of list) {
+    const est = (r.imageDataUrl && settings.sendPhotos) ? r.imageDataUrl.length : 4000;
+    if (batch.length && (size + est > 4000000 || batch.length >= 5)) {
+      chunks.push(batch); batch = []; size = 0;
+    }
+    batch.push(r); size += est;
+  }
+  if (batch.length) chunks.push(batch);
+  return chunks;
+}
+
+async function syncUnsynced() {
+  const unsynced = records.filter(r => !r.syncedAt);
+  if (!unsynced.length) return;
+  await syncRecords(unsynced, false);
+}
+
+async function syncRecords(list, quiet) {
+  if (isSyncing) return;
+  if (!settings.sheetUrl) { setSyncStatus('Google Sheet endpoint is not configured.', 'bad'); return; }
+  isSyncing = true;
+  const btn = document.getElementById('syncBtn');
+  btn.disabled = true;
+
+  let sent = 0, failed = 0;
+  const chunks = chunkRecords(list);
+  try {
+    for (let i = 0; i < chunks.length; i++) {
+      btn.innerHTML = `<span class="spinner" style="display:inline-block"></span> Sending batch ${i + 1} of ${chunks.length}...`;
+      try {
+        const res = await postToSheet({
+          action: 'append',
+          secret: settings.sheetSecret,
+          records: chunks[i].map(recordForSheet)
+        });
+        if (res.ok) {
+          const stamp = Date.now();
+          for (const r of chunks[i]) {
+            r.syncedAt = stamp;
+            await persistRecords(r);
+          }
+          sent += chunks[i].length;
+        } else {
+          failed += chunks[i].length;
+          setSyncStatus('Sheet rejected the batch: ' + esc(res.error || 'unknown error'), 'bad');
+        }
+      } catch (err) {
+        failed += chunks[i].length;
+        setSyncStatus('Sync error: ' + esc(err.message), 'bad');
+      }
+    }
+    if (!failed) {
+      setSyncStatus(`✓ ${sent} record${sent !== 1 ? 's' : ''} sent to the sheet at ${new Date().toLocaleTimeString()}${settings.blindSync ? ' (blind mode — verify in the sheet)' : ''}`, 'ok');
+    } else if (sent) {
+      setSyncStatus(`${sent} sent, ${failed} failed — press again to retry the rest.`, 'warn');
+    }
+  } finally {
+    isSyncing = false;
+    renderRecords();
+  }
+}
+
+// ─── CSV / ZIP export ─────────────────────────────────────────────────────────
+function getNewRecords() {
+  return records.filter(r => !lastExportTime || (r.savedTimestamp || r.id) > lastExportTime);
+}
+
+function csvEsc(v) {
+  if (v == null) return '';
+  const s = Array.isArray(v) ? v.join('; ') : String(v);
+  const clean = s.replace(/"/g, '""');
+  return (clean.includes(',') || clean.includes('"') || clean.includes('\n')) ? `"${clean}"` : clean;
+}
+
+function buildCsv(list) {
+  const headers = SHEET_FIELDS.concat(['Photo Filename']);
+  const rows = list.map(r => {
+    const flat = recordForSheet(r);
+    return SHEET_FIELDS.map(f => csvEsc(flat[f]))
+      .concat([csvEsc(r.imageDataUrl ? `photo_${r.id}.jpg` : '')])
+      .join(',');
+  });
+  return [headers.join(','), ...rows].join('\r\n');
+}
+
+function downloadCsvOnly() {
+  if (!records.length) return;
+  const blob = new Blob([buildCsv(records)], { type: 'text/csv' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `pfas_records_${new Date().toISOString().slice(0, 10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+async function exportNewRecords() {
+  const newRecs = getNewRecords();
+  if (newRecs.length === 0 || isExporting) return;
+  if (typeof JSZip === 'undefined') { alert('JSZip not loaded. Check your connection and reload.'); return; }
+
+  isExporting = true;
+  const btn = document.getElementById('exportBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner" style="display:inline-block"></span> Building ZIP...';
+
+  try {
+    const zip = new JSZip();
+    zip.file('pfas_records.csv', buildCsv(newRecs));
+    for (const r of newRecs) {
+      const photos = r.photos && r.photos.length ? r.photos : (r.imageDataUrl ? [r.imageDataUrl] : []);
+      photos.forEach((p, i) => {
+        zip.file(i === 0 ? `photo_${r.id}.jpg` : `photo_${r.id}_${i + 1}.jpg`, p.split(',')[1], { base64: true });
+      });
+    }
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `pfas_export_${new Date().toISOString().slice(0, 10)}.zip`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+
+    lastExportTime = Date.now();
+    if (db) await dbSetMeta('last_export', lastExportTime);
+    else localStorage.setItem('pfas_last_export', String(lastExportTime));
+    renderRecords();
+  } catch (err) {
+    alert('Export failed: ' + err.message);
+  } finally {
+    isExporting = false;
+  }
+}
+</script>
+</body>
+</html>
